@@ -1,0 +1,55 @@
+# parameters
+nc: 10  # number of classes
+
+# depth_multiple: 1.33  # model depth multiple
+# width_multiple: 1.25  # layer channel multiple
+# # anchors  1920
+# anchors:
+#   - [8,10,  10,22, 20,18]  # P3/8
+#   - [23,40,  49,28,  41,59]  # P4/16
+#   - [93,48,  81,93,  170,140]  # P5/32
+
+depth_multiple: 1.00  # model depth multiple
+width_multiple: 1.00  # layer channel multiple
+# anchors  1536
+anchors:
+  - [6,8,    10,22,  19,15]  # P3/8
+  - [19,32,  39,22,  32,47]  # P4/16
+  - [74,38,  65,74,  136,112]  # P5/32
+
+# YOLOv5 backbone
+backbone:
+  # [from, number, module, args]
+  [[-1, 1, SpatialPriorModule, [64, 348, False]],
+   [[-100, 0], 1, GPViTAdapterSingleStageESOD, ['L2']],
+
+  #  [-1, 1, Indexer, [348, 0]], 
+  #  [-1, 1, Token2Image, [0.125]], 
+  #  [-1, 1, DWConv, [348, 13, 1]],
+  #  [[-1], 1, Segmenter, [1]],
+  #  [[-3, -1], 1, HeatMapParser, [348, 8, 0.5, True]],
+
+  #  [[-100, 0], 1, GPViTAdapterSingleStageESOD, ['L2']],
+
+  [-1, 1, Indexer, [348, 0]],   # 2-P3/8
+  [-2, 1, Indexer, [348, 1]],   # 3-P4/16
+  [-3, 1, Indexer, [348, 2]],   # 4-P5/32
+  ]
+
+# YOLOv5 head
+head:
+  [[-1, 1, Conv, [256, 1, 1, None, 1, False]],
+   [-1, 1, Conv, [256, 3, 1, None, 1, False]],   # 6 (P5/32-medium)
+
+   [-4, 1, Conv, [256, 1, 1, None, 1, False]],
+   [-3, 1, nn.Upsample, [None, 2, 'nearest']],
+   [[-1, -2], 1, Add, []],
+   [-1, 1, Conv, [256, 3, 1, None, 1, False]],   # 10 (P4/16-medium)
+
+   [-9, 1, Conv, [256, 1, 1, None, 1, False]],
+   [-3, 1, nn.Upsample, [None, 2, 'nearest']],
+   [[-1, -2], 1, Add, []],
+   [-1, 1, Conv, [256, 3, 1, None, 1, False]],   # 14 (P3/8-small)
+
+   [[-1, -5, -9], 1, Detect, [nc, anchors]],  # Detect(P3, P4, P5)
+  ]

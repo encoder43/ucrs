@@ -1,0 +1,8 @@
+# TinyPerson-specific anchors computed using k-means
+# Computed for image size: 2048x2048
+# Number of anchors: 9 (3 per layer)
+
+anchors:
+  - [5, 7, 6, 13, 10, 10]
+  - [9, 20, 16, 19, 16, 36]
+  - [30, 33, 47, 87, 143, 168]
