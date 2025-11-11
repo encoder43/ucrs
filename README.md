@@ -1,10 +1,10 @@
-# RE-ScopeNet: Region-Efficient Framework for Small Object Detection in HR Images
+# UCRS: Uncertainty-Calibrated Region Sampling for Efficient Small Object Detection in High-Resolution Images
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-1.7+-orange.svg)](https://pytorch.org/)
 
-This repository contains the official implementation of **RE-ScopeNet: Region-Efficient Framework for Small Object Detection in High-Resolution Images**, a novel architecture for detecting small objects in high-resolution aerial and surveillance imagery. The project extends beyond the original paper implementation with enhanced confidence-guided probabilistic region selection capabilities.
+This repository contains the official implementation of **UCRS (Uncertainty-Calibrated Region Sampling)**, a framework that employs evidential learning to estimate prediction confidence and allocate computation adaptively across image regions. UCRS achieves a 60-75% reduction in FLOPs while maintaining detection accuracy, making it ideal for UAV or surveillance systems operating under tight real-time constraints.
 
 ## Table of Contents
 
@@ -26,16 +26,23 @@ This repository contains the official implementation of **RE-ScopeNet: Region-Ef
 
 ## Overview
 
-RE-ScopeNet addresses the computational challenges of detecting small objects in high-resolution images through a region-prioritization paradigm. The framework consists of three key components:
+UCRS addresses the fundamental computational challenge of detecting small objects (occupying < 0.1% of image area) in high-resolution imagery (exceeding 2048×2048 pixels). By linking uncertainty quantification with spatial attention, UCRS adaptively focuses computational effort only where the information content is expected to be high.
 
-1. **RegionLocator (Segmenter)**: Generates class-agnostic region likelihood maps to identify areas of interest
-2. **PatchReducer (HeatMapParser)**: Dynamically reduces feature maps into relevant patches based on likelihood heatmaps
-3. **SelectivePredictor**: Efficient detection head that processes only the selected patches
+The framework consists of three key components:
+
+1. **Uncertainty Estimation Module**: Employs evidential learning with gamma distribution modeling to predict mean likelihood (μ) and confidence (σ²) at each spatial location
+2. **RegionLocator**: Generates class-agnostic likelihood maps to identify areas of interest
+3. **Uncertainty-Calibrated Region Selection**: Uses confidence-weighted metrics to make principled, probabilistic decisions about computational allocation
+
+**Key Results:**
+- **VisDrone**: 44.4% AP50 and 25.2% AP at 34.9 FPS with 52.5 GFLOPs (65-94% computation reduction)
+- **TinyPerson**: 35.1% AP50 and 10.9% AP at 19.4 FPS
+- **Efficiency**: 60-75% reduction in FLOPs while maintaining detection accuracy
+- **Precision**: 5-8% improvement over deterministic region sampling at equivalent computational budgets
 
 This implementation includes:
-- Original RE-ScopeNet paper implementation
-- Enhanced Confidence-Guided RE-ScopeNet with probabilistic region selection
-- Complete training and evaluation pipelines for multiple datasets
+- Complete UCRS framework with evidential learning-based uncertainty estimation
+- Full training and evaluation pipelines for TinyPerson and VisDrone datasets
 - Comprehensive model comparison tools
 - Automatic metrics logging and visualization
 
@@ -43,11 +50,11 @@ This implementation includes:
 
 ### Core Capabilities
 
-- **Multi-Dataset Support**: Pre-configured for VisDrone, UAVDT, and TinyPerson datasets
-- **Three Model Variants**:
+- **Multi-Dataset Support**: Pre-configured for VisDrone and TinyPerson datasets
+- **Uncertainty-Calibrated Region Sampling**: Probabilistic resource allocation using evidential learning
+- **Model Variants**:
   - Base YOLOv5 (baseline)
-  - RE-ScopeNet (original paper implementation)
-  - Confidence-Guided RE-ScopeNet (enhanced with probabilistic region selection)
+  - UCRS (Uncertainty-Calibrated Region Sampling with evidential learning)
 - **Automatic Metrics Logging**: CSV-based training metrics with epoch-by-epoch tracking
 - **Structured Results**: Organized test results with quantitative and qualitative outputs
 - **Model Comparison Tools**: Side-by-side evaluation of multiple trained models
@@ -57,11 +64,12 @@ This implementation includes:
 
 ### Technical Highlights
 
-- **Region-Prioritization Architecture**: Reduces computational cost by processing only relevant image regions
-- **Confidence Quantification**: Probabilistic patch selection using evidential learning
-- **SAM Integration**: Optional Segment Anything Model (SAM) integration for precise ground truth heatmaps
+- **Evidential Learning**: Single-pass uncertainty estimation using gamma distribution modeling (α, β parameters)
+- **Confidence-Weighted Selection**: Probabilistic region allocation based on E_conf = μ · (1 - σ²)
+- **Computational Efficiency**: 60-75% FLOP reduction while maintaining competitive accuracy
+- **Real-Time Performance**: Up to 34.9 FPS on VisDrone and 19.4 FPS on TinyPerson
 - **Flexible Configuration**: YAML-based model and hyperparameter configuration
-- **Comprehensive Evaluation**: Support for COCO-style metrics and official dataset evaluation tools
+- **Comprehensive Evaluation**: Support for COCO-style metrics (mAP@0.5, mAP@0.5:0.95) and official dataset evaluation tools
 
 ## Installation
 
@@ -141,22 +149,22 @@ For a complete training and evaluation workflow on TinyPerson:
 # 1. Prepare dataset
 python scripts/data_prepare.py --dataset dataset/tinyperson
 
-# 2. Train base model
+# 2. Train UCRS model
 python train.py `
     --data data/tinyperson.yaml `
-    --cfg models/cfg/yolov5m.yaml `
+    --cfg models/cfg/esod/tinyperson_yolov5m_uncertainty.yaml `
     --weights weights/yolov5m.pt `
     --hyp data/hyps/hyp.tinyperson.finetune.yaml `
     --batch-size 8 `
     --img-size 2048 2048 `
     --epochs 50 `
     --device 0 `
-    --name tinyperson_yolov5m_base
+    --name tinyperson_yolov5m_ucrs
 
 # 3. Evaluate model
 python test.py test `
     --data data/tinyperson.yaml `
-    --weights runs/train/tinyperson_yolov5m_base/weights/best.pt `
+    --weights runs/train/tinyperson_yolov5m_ucrs/weights/best.pt `
     --batch-size 8 `
     --img-size 2048 `
     --device 0 `
@@ -255,7 +263,7 @@ Before training, ensure:
 
 #### 1. Base YOLOv5 (Baseline)
 
-Standard YOLOv5 model without RE-ScopeNet modifications. Provides a baseline for comparison.
+Standard YOLOv5 model without UCRS modifications. Provides a baseline for comparison.
 
 **Training Command**:
 ```powershell
@@ -272,28 +280,9 @@ python train.py `
     --project runs/train
 ```
 
-#### 2. RE-ScopeNet
+#### 2. UCRS (Uncertainty-Calibrated Region Sampling)
 
-Original RE-ScopeNet framework with RegionLocator, PatchReducer, and SelectivePredictor components.
-
-**Training Command**:
-```powershell
-python train.py `
-    --data data/tinyperson.yaml `
-    --cfg models/cfg/esod/tinyperson_yolov5m.yaml `
-    --weights weights/yolov5m.pt `
-    --hyp data/hyps/hyp.tinyperson.finetune.yaml `
-    --batch-size 8 `
-    --img-size 2048 2048 `
-    --epochs 50 `
-    --device 0 `
-    --name tinyperson_yolov5m_rescopenet `
-    --project runs/train
-```
-
-#### 3. Confidence-Guided RE-ScopeNet
-
-Enhanced RE-ScopeNet with probabilistic confidence-guided region selection for improved robustness.
+UCRS framework with evidential learning-based uncertainty estimation, RegionLocator, and uncertainty-calibrated region selection.
 
 **Training Command**:
 ```powershell
@@ -306,9 +295,14 @@ python train.py `
     --img-size 2048 2048 `
     --epochs 50 `
     --device 0 `
-    --name tinyperson_yolov5m_confidence `
+    --name tinyperson_yolov5m_ucrs `
     --project runs/train
 ```
+
+**Key Hyperparameters:**
+- `τ_conf = 0.3`: Confidence threshold for region selection
+- `λ1 = 0.2`: Weight for RegionLocator loss
+- `λ2 = 0.1`: Weight for confidence estimation loss
 
 ### Multi-GPU Training
 
@@ -317,14 +311,14 @@ For distributed training across multiple GPUs:
 ```powershell
 python -m torch.distributed.launch --nproc_per_node 4 train.py `
     --data data/tinyperson.yaml `
-    --cfg models/cfg/esod/tinyperson_yolov5m.yaml `
+    --cfg models/cfg/esod/tinyperson_yolov5m_uncertainty.yaml `
     --weights weights/yolov5m.pt `
     --hyp data/hyps/hyp.tinyperson.finetune.yaml `
     --batch-size 32 `
     --img-size 2048 2048 `
     --epochs 50 `
     --device 0,1,2,3 `
-    --name tinyperson_yolov5m_rescopenet `
+    --name tinyperson_yolov5m_ucrs `
     --project runs/train
 ```
 
@@ -377,28 +371,14 @@ The framework includes adaptive hyperparameter scheduling (enabled by default):
 ```powershell
 python train.py `
     --data data/visdrone.yaml `
-    --cfg models/cfg/esod/visdrone_yolov5m.yaml `
+    --cfg models/cfg/esod/visdrone_yolov5m_uncertainty.yaml `
     --weights weights/yolov5m.pt `
     --hyp data/hyps/hyp.visdrone.finetune.yaml `
     --batch-size 8 `
     --img-size 1536 1536 `
     --epochs 50 `
     --device 0 `
-    --name visdrone_yolov5m_rescopenet
-```
-
-#### UAVDT
-```powershell
-python train.py `
-    --data data/uavdt.yaml `
-    --cfg models/cfg/esod/uavdt_yolov5m.yaml `
-    --weights weights/yolov5m.pt `
-    --hyp data/hyps/hyp.uavdt.yaml `
-    --batch-size 8 `
-    --img-size 1280 1280 `
-    --epochs 50 `
-    --device 0 `
-    --name uavdt_yolov5m_rescopenet
+    --name visdrone_yolov5m_ucrs
 ```
 
 ## Testing and Evaluation
@@ -418,7 +398,7 @@ python test.py test `
 
 python test.py test `
     --data data/tinyperson.yaml `
-    --weights runs/train/tinyperson_yolov5m_confidence/weights/best.pt `
+    --weights runs/train/tinyperson_yolov5m_ucrs/weights/best.pt `
     --batch-size 8 `
     --img-size 2048 `
     --device 0 `
@@ -445,7 +425,7 @@ Compare multiple trained models side-by-side:
 python scripts/test_models.py `
     --data data/tinyperson.yaml `
     --weights-dir runs/train `
-    --models tinyperson_yolov5m_base tinyperson_yolov5m_rescopenet tinyperson_yolov5m_confidence `
+    --models tinyperson_yolov5m_base tinyperson_yolov5m_ucrs `
     --batch-size 8 `
     --img-size 2048 `
     --device 0 `
@@ -638,33 +618,34 @@ names: ['person']
 ### Base YOLOv5
 
 - **Config**: `models/cfg/yolov5m.yaml`
-- **Description**: Standard YOLOv5m without RE-ScopeNet modifications
+- **Description**: Standard YOLOv5m without UCRS modifications
 - **Use Case**: Baseline for comparison
 
-### RE-ScopeNet (Original)
-
-- **Config**: `models/cfg/esod/{dataset}_yolov5m.yaml`
-- **Components**: RegionLocator, PatchReducer, SelectivePredictor
-- **Description**: Original RE-ScopeNet framework from the paper
-- **Use Case**: Standard RE-ScopeNet implementation
-
-### Confidence-Guided RE-ScopeNet
+### UCRS (Uncertainty-Calibrated Region Sampling)
 
 - **Config**: `models/cfg/esod/{dataset}_yolov5m_uncertainty.yaml`
-- **Components**: ConfidenceSegmenter, ConfidenceSlicer
-- **Description**: Enhanced RE-ScopeNet with probabilistic confidence-guided region selection
-- **Benefits**: Reduced false positives, improved precision, robustness to uncertain regions
-- **Use Case**: Enhanced performance with confidence quantification
+- **Components**: 
+  - Uncertainty Estimation Module (evidential learning with gamma distribution)
+  - RegionLocator (class-agnostic likelihood maps)
+  - Uncertainty-Calibrated Region Selection (confidence-weighted sampling)
+- **Description**: Framework that employs evidential learning to estimate prediction confidence and allocate computation adaptively
+- **Benefits**: 
+  - 60-75% reduction in FLOPs while maintaining detection accuracy
+  - 5-8% precision improvement over deterministic region sampling
+  - Real-time performance (up to 34.9 FPS on VisDrone)
+- **Use Case**: Efficient small object detection in high-resolution imagery with computational constraints
 
 ### Key Differences
 
-| Feature | Base YOLOv5 | RE-ScopeNet | Confidence RE-ScopeNet |
-|---------|-------------|-------------|----------------------|
-| Patch-based Processing | ❌ | ✅ | ✅ |
-| Region Likelihood Masking | ❌ | ✅ | ✅ |
-| Dynamic Patch Reduction | ❌ | ✅ | ✅ |
-| Confidence Quantification | ❌ | ❌ | ✅ |
-| Probabilistic Selection | ❌ | ❌ | ✅ |
+| Feature | Base YOLOv5 | UCRS |
+|---------|-------------|------|
+| Patch-based Processing | ❌ | ✅ |
+| Region Likelihood Masking | ❌ | ✅ |
+| Dynamic Patch Reduction | ❌ | ✅ |
+| Evidential Learning | ❌ | ✅ |
+| Uncertainty Quantification | ❌ | ✅ |
+| Confidence-Weighted Selection | ❌ | ✅ |
+| Probabilistic Resource Allocation | ❌ | ✅ |
 
 ## Troubleshooting
 
@@ -714,16 +695,22 @@ names: ['person']
 
 ## Citation
 
-If you use this code in your research, please cite the original RE-ScopeNet paper:
+If you use this code in your research, please cite the UCRS paper:
 
 ```bibtex
-@article{rescopenet2025,
-    title={RE-ScopeNet: Region-Efficient Framework for Small Object Detection in High-Resolution Images},
-    author={[Author Names]},
-    journal={[Journal Name]},
+@article{ucrs2025,
+    title={UCRS: Uncertainty-Calibrated Region Sampling for Efficient Small Object Detection in High-Resolution Images},
+    author={1st Author Name and 2nd Author Name and 3rd Author Name and 4th Author Name},
+    journal={[Journal/Conference Name]},
     year={2025}
 }
 ```
+
+**Authors:**
+- 1st Author Name, Department of Electronics and Communication Engineering, National Institute of Technology Rourkela
+- 2nd Author Name, Department of Electronics and Communication Engineering, National Institute of Technology Rourkela
+- 3rd Author Name, Department of Electronics and Communication Engineering, National Institute of Technology Rourkela
+- 4th Author Name, Department of Electronics and Communication Engineering, National Institute of Technology Rourkela
 
 ## License
 
@@ -737,4 +724,4 @@ This project is licensed under the GNU General Public License v3.0. See the [LIC
 
 ---
 
-**Note**: This repository includes both the RE-ScopeNet implementation and confidence-guided variants. For the exact paper implementation, use the RE-ScopeNet config files. For improved performance with confidence quantification, use the confidence-guided config files.
+**Note**: This repository contains the UCRS (Uncertainty-Calibrated Region Sampling) implementation. The framework employs evidential learning for uncertainty estimation and confidence-weighted region selection. Use the `*_uncertainty.yaml` config files to train UCRS models with uncertainty-calibrated region sampling.
